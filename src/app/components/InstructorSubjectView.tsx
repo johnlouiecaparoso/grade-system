@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import {
@@ -16,12 +16,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
-import { GraduationCap, User, LogOut, ArrowLeft, Edit, Plus, Trash2 } from 'lucide-react';
+import { GraduationCap, User, LogOut, ArrowLeft, Edit, Plus, Trash2, Link as LinkIcon, Copy } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { formatGradePoint5 } from '../../lib/grades';
+import {
+  calculateTotalGradePercent,
+  CO_ASSESSMENT_TASKS,
+  createEmptyAssessmentScores,
+  finalWeightPercent,
+  formatGradePoint5,
+} from '../../lib/grades';
 import { UserAvatar } from './UserAvatar';
 
 interface InstructorSubjectViewProps {
@@ -29,14 +35,11 @@ interface InstructorSubjectViewProps {
 }
 
 interface StudentGrade {
-  studentId: string;
+  gradeId: string;
   studentName: string;
   studentNumber: string;
-  quizzes: number;
-  summative: number;
-  midterm: number;
-  final: number;
   totalGrade: number;
+  assessmentScores: Record<string, number>;
 }
 
 interface Subject {
@@ -52,6 +55,39 @@ interface Section {
   section: string;
 }
 
+function toInputScoreMap(scores: Record<string, number>): Record<string, string> {
+  return CO_ASSESSMENT_TASKS.reduce<Record<string, string>>((acc, task) => {
+    acc[task.taskKey] = String(scores[task.taskKey] ?? 0);
+    return acc;
+  }, {});
+}
+
+function toNumericScoreMap(scores: Record<string, string>): Record<string, number> {
+  return CO_ASSESSMENT_TASKS.reduce<Record<string, number>>((acc, task) => {
+    const parsed = parseFloat(scores[task.taskKey]);
+    acc[task.taskKey] = Number.isFinite(parsed) ? parsed : 0;
+    return acc;
+  }, {});
+}
+
+function toInputTotalScoreMap(scores: Record<string, number>): Record<string, string> {
+  return CO_ASSESSMENT_TASKS.reduce<Record<string, string>>((acc, task) => {
+    const score = Number(scores[task.taskKey] ?? 0);
+    const totalScore = (score * finalWeightPercent(task)) / 100;
+    acc[task.taskKey] = totalScore.toFixed(2);
+    return acc;
+  }, {});
+}
+
+function calculateTotalGradeFromTotalScores(totalScores: Record<string, string>): number {
+  const total = CO_ASSESSMENT_TASKS.reduce((sum, task) => {
+    const parsed = parseFloat(totalScores[task.taskKey]);
+    return sum + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+
+  return Math.round(total);
+}
+
 export default function InstructorSubjectView({ onLogout }: InstructorSubjectViewProps) {
   const navigate = useNavigate();
   const { sectionId, subjectId } = useParams();
@@ -61,31 +97,27 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
   const [students, setStudents] = useState<StudentGrade[]>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentGrade | null>(null);
-  const [editScores, setEditScores] = useState({
-    quizzes: '',
-    summative: '',
-    midterm: '',
-    final: ''
-  });
+  const [editScores, setEditScores] = useState<Record<string, string>>(toInputScoreMap(createEmptyAssessmentScores()));
+  const [editTotalScores, setEditTotalScores] = useState<Record<string, string>>(toInputTotalScoreMap(createEmptyAssessmentScores()));
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [removeStudentOpen, setRemoveStudentOpen] = useState(false);
   const [studentToRemove, setStudentToRemove] = useState<StudentGrade | null>(null);
-  const [addStudentForm, setAddStudentForm] = useState({
-    studentNumber: '',
-    quizzes: '0',
-    summative: '0',
-    midterm: '0',
-    final: '0'
-  });
+  const [addStudentNumber, setAddStudentNumber] = useState('');
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteToken, setInviteToken] = useState('');
+  const [inviteExpiresAt, setInviteExpiresAt] = useState('');
 
   useEffect(() => {
     if (!sectionId || !subjectId) return;
+
     (async () => {
       const { data: sectionData, error: sectionError } = await supabase
         .from('sections')
         .select('*')
         .eq('id', sectionId)
         .single();
+
       if (!sectionError && sectionData) {
         setSection({
           id: sectionData.id,
@@ -93,11 +125,13 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
           section: sectionData.section,
         });
       }
+
       const { data: subjectData, error: subjectError } = await supabase
         .from('subjects')
         .select('*')
         .eq('id', subjectId)
         .single();
+
       if (!subjectError && subjectData) {
         setSubject({
           id: subjectData.id,
@@ -106,166 +140,293 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
           credits: subjectData.credits ?? 0,
         });
       }
+
       const { data: gradesData, error: gradesError } = await supabase
         .from('grades')
-        .select('*')
+        .select('id, student_name, student_number, total_grade')
         .eq('subject_id', subjectId)
         .order('student_number');
+
       if (gradesError) {
         setStudents([]);
         return;
       }
-      const list: StudentGrade[] = (gradesData || []).map((g: {
+
+      const baseList = (gradesData || []).map((grade: {
         id: string;
         student_name: string;
         student_number: string;
-        quizzes: number;
-        summative: number;
-        midterm: number;
-        final: number;
         total_grade: number;
       }) => ({
-        studentId: g.id,
-        studentName: g.student_name,
-        studentNumber: g.student_number,
-        quizzes: Number(g.quizzes),
-        summative: Number(g.summative),
-        midterm: Number(g.midterm),
-        final: Number(g.final),
-        totalGrade: Number(g.total_grade),
+        gradeId: grade.id,
+        studentName: grade.student_name,
+        studentNumber: grade.student_number,
+        totalGrade: Number(grade.total_grade),
+        assessmentScores: createEmptyAssessmentScores(),
       }));
-      setStudents(list);
+
+      if (baseList.length === 0) {
+        setStudents([]);
+        return;
+      }
+
+      const gradeIds = baseList.map((item) => item.gradeId);
+      const { data: scoreRows, error: scoreError } = await supabase
+        .from('grade_assessment_scores')
+        .select('grade_id, task_key, score')
+        .in('grade_id', gradeIds);
+
+      if (scoreError) {
+        setStudents(baseList);
+        return;
+      }
+
+      const scoreByGrade = baseList.reduce<Record<string, Record<string, number>>>((acc, student) => {
+        acc[student.gradeId] = createEmptyAssessmentScores();
+        return acc;
+      }, {});
+
+      for (const row of scoreRows || []) {
+        const record = row as { grade_id: string; task_key: string; score: number };
+        if (scoreByGrade[record.grade_id]) {
+          scoreByGrade[record.grade_id][record.task_key] = Number(record.score ?? 0);
+        }
+      }
+
+      const mapped = baseList.map((student) => {
+        const assessmentScores = scoreByGrade[student.gradeId] ?? createEmptyAssessmentScores();
+        const hasAnyScore = CO_ASSESSMENT_TASKS.some((task) => assessmentScores[task.taskKey] > 0);
+
+        return {
+          ...student,
+          assessmentScores,
+          totalGrade: hasAnyScore ? calculateTotalGradePercent(assessmentScores) : student.totalGrade,
+        };
+      });
+
+      setStudents(mapped);
     })();
   }, [sectionId, subjectId]);
 
+  const computedEditTotal = useMemo(() => {
+    return calculateTotalGradePercent(toNumericScoreMap(editScores));
+  }, [editScores]);
+
+  const inviteLink = useMemo(() => {
+    if (!inviteToken) return '';
+    return `${window.location.origin}/join/${inviteToken}`;
+  }, [inviteToken]);
+
+  const inviteQrUrl = useMemo(() => {
+    if (!inviteLink) return '';
+    return `https://quickchart.io/qr?size=240&text=${encodeURIComponent(inviteLink)}`;
+  }, [inviteLink]);
 
   const handleEditClick = (student: StudentGrade) => {
     setSelectedStudent(student);
-    setEditScores({
-      quizzes: student.quizzes.toString(),
-      summative: student.summative.toString(),
-      midterm: student.midterm.toString(),
-      final: student.final.toString()
-    });
+    setEditScores(toInputScoreMap(student.assessmentScores));
+    setEditTotalScores(toInputTotalScoreMap(student.assessmentScores));
     setIsEditDialogOpen(true);
   };
 
   const handleSaveGrades = async () => {
-    if (!selectedStudent || !subjectId) return;
+    if (!selectedStudent) return;
 
-    const quizzes = parseFloat(editScores.quizzes);
-    const summative = parseFloat(editScores.summative);
-    const midterm = parseFloat(editScores.midterm);
-    const final = parseFloat(editScores.final);
+    const numericScores = toNumericScoreMap(editScores);
+    const invalid = CO_ASSESSMENT_TASKS.some((task) => {
+      const value = numericScores[task.taskKey];
+      return Number.isNaN(value) || value < 0 || value > 100;
+    });
 
-    if ([quizzes, summative, midterm, final].some(score => score < 0 || score > 100)) {
-      toast.error('Scores must be between 0 and 100');
+    if (invalid) {
+      toast.error('All assessment scores must be between 0 and 100');
       return;
     }
 
-    const totalGrade = Math.round(
-      quizzes * 0.2 + summative * 0.3 + midterm * 0.25 + final * 0.25
-    );
+    const totalGrade = calculateTotalGradePercent(numericScores);
+    const scorePayload = CO_ASSESSMENT_TASKS.map((task) => ({
+      grade_id: selectedStudent.gradeId,
+      task_key: task.taskKey,
+      score: numericScores[task.taskKey],
+    }));
 
-    const { error } = await supabase
+    const { error: scoreError } = await supabase
+      .from('grade_assessment_scores')
+      .upsert(scorePayload, { onConflict: 'grade_id,task_key' });
+
+    if (scoreError) {
+      toast.error(scoreError.message);
+      return;
+    }
+
+    const { error: gradeError } = await supabase
       .from('grades')
-      .update({ quizzes, summative, midterm, final, total_grade: totalGrade })
-      .eq('id', selectedStudent.studentId);
+      .update({ total_grade: totalGrade })
+      .eq('id', selectedStudent.gradeId);
 
-    if (error) {
-      toast.error(error.message);
+    if (gradeError) {
+      toast.error(gradeError.message);
       return;
     }
 
     setStudents((prev) =>
-      prev.map((s) =>
-        s.studentId === selectedStudent.studentId
-          ? { ...s, quizzes, summative, midterm, final, totalGrade }
-          : s
+      prev.map((student) =>
+        student.gradeId === selectedStudent.gradeId
+          ? { ...student, assessmentScores: numericScores, totalGrade }
+          : student
       )
     );
+
     setIsEditDialogOpen(false);
     setSelectedStudent(null);
-    toast.success('Grades updated successfully!');
+    toast.success('Student assessment grades updated successfully');
   };
 
   const handleAddStudent = async () => {
     if (!subjectId) return;
-    const number = addStudentForm.studentNumber.trim();
-    if (!number) {
+
+    const studentNumber = addStudentNumber.trim();
+    if (!studentNumber) {
       toast.error('Student ID number is required');
       return;
     }
 
-    // Only add if a student with this ID exists in profiles (registered students)
     const { data: profileData, error: lookupError } = await supabase
       .from('profiles')
       .select('id, full_name, student_number')
       .eq('role', 'student')
-      .eq('student_number', number)
+      .eq('student_number', studentNumber)
       .maybeSingle();
 
     if (lookupError) {
       toast.error('Could not look up student: ' + lookupError.message);
       return;
     }
+
     if (!profileData) {
       toast.error('No student found with that ID number. The student must be registered first.');
       return;
     }
 
-    const quizzes = parseFloat(addStudentForm.quizzes) || 0;
-    const summative = parseFloat(addStudentForm.summative) || 0;
-    const midterm = parseFloat(addStudentForm.midterm) || 0;
-    const final = parseFloat(addStudentForm.final) || 0;
-    if ([quizzes, summative, midterm, final].some(s => s < 0 || s > 100)) {
-      toast.error('Scores must be between 0 and 100');
-      return;
-    }
-    const totalGrade = Math.round(
-      quizzes * 0.2 + summative * 0.3 + midterm * 0.25 + final * 0.25
-    );
-
-    const { data: inserted, error } = await supabase
+    const { data: insertedGrade, error: gradeInsertError } = await supabase
       .from('grades')
       .insert({
         subject_id: subjectId,
         student_profile_id: profileData.id,
         student_name: profileData.full_name,
         student_number: profileData.student_number,
-        quizzes,
-        summative,
-        midterm,
-        final,
-        total_grade: totalGrade,
+        total_grade: 0,
       })
-      .select('id, student_name, student_number, quizzes, summative, midterm, final, total_grade')
+      .select('id, student_name, student_number, total_grade')
       .single();
 
-    if (error) {
-      if (error.code === '23505') {
+    if (gradeInsertError) {
+      if (gradeInsertError.code === '23505') {
         toast.error('This student is already in this subject.');
       } else {
-        toast.error(error.message);
+        toast.error(gradeInsertError.message);
       }
       return;
     }
+
+    const initialScores = createEmptyAssessmentScores();
+    const scorePayload = CO_ASSESSMENT_TASKS.map((task) => ({
+      grade_id: insertedGrade.id,
+      task_key: task.taskKey,
+      score: initialScores[task.taskKey],
+    }));
+
+    const { error: scoreInsertError } = await supabase
+      .from('grade_assessment_scores')
+      .insert(scorePayload);
+
+    if (scoreInsertError) {
+      toast.error(scoreInsertError.message);
+      await supabase.from('grades').delete().eq('id', insertedGrade.id);
+      return;
+    }
+
     setStudents((prev) => [
       ...prev,
       {
-        studentId: inserted.id,
-        studentName: inserted.student_name,
-        studentNumber: inserted.student_number,
-        quizzes: Number(inserted.quizzes),
-        summative: Number(inserted.summative),
-        midterm: Number(inserted.midterm),
-        final: Number(inserted.final),
-        totalGrade: Number(inserted.total_grade),
+        gradeId: insertedGrade.id,
+        studentName: insertedGrade.student_name,
+        studentNumber: insertedGrade.student_number,
+        totalGrade: Number(insertedGrade.total_grade),
+        assessmentScores: initialScores,
       },
     ]);
-    setAddStudentForm({ studentNumber: '', quizzes: '0', summative: '0', midterm: '0', final: '0' });
+
+    setAddStudentNumber('');
     setAddStudentOpen(false);
     toast.success('Student added');
+  };
+
+  const openInviteDialog = async () => {
+    if (!subjectId || !user?.id) return;
+
+    setInviteDialogOpen(true);
+    setInviteLoading(true);
+
+    const nowIso = new Date().toISOString();
+    const { data: existingInvite, error: existingError } = await supabase
+      .from('subject_invites')
+      .select('token, expires_at')
+      .eq('subject_id', subjectId)
+      .eq('is_active', true)
+      .gt('expires_at', nowIso)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingError) {
+      toast.error(existingError.message);
+      setInviteLoading(false);
+      return;
+    }
+
+    if (existingInvite) {
+      setInviteToken(existingInvite.token);
+      setInviteExpiresAt(existingInvite.expires_at);
+      setInviteLoading(false);
+      return;
+    }
+
+    const token = crypto.randomUUID().replace(/-/g, '');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: newInvite, error: createError } = await supabase
+      .from('subject_invites')
+      .insert({
+        subject_id: subjectId,
+        token,
+        created_by: user.id,
+        expires_at: expiresAt,
+        is_active: true,
+      })
+      .select('token, expires_at')
+      .single();
+
+    if (createError) {
+      toast.error(createError.message);
+      setInviteLoading(false);
+      return;
+    }
+
+    setInviteToken(newInvite.token);
+    setInviteExpiresAt(newInvite.expires_at);
+    setInviteLoading(false);
+  };
+
+  const handleCopyInviteLink = async () => {
+    if (!inviteLink) return;
+
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      toast.success('Invite link copied');
+    } catch {
+      toast.error('Could not copy invite link');
+    }
   };
 
   const openRemoveStudent = (student: StudentGrade) => {
@@ -275,12 +436,18 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
 
   const handleRemoveStudent = async () => {
     if (!studentToRemove) return;
-    const { error } = await supabase.from('grades').delete().eq('id', studentToRemove.studentId);
+
+    const { error } = await supabase
+      .from('grades')
+      .delete()
+      .eq('id', studentToRemove.gradeId);
+
     if (error) {
       toast.error(error.message);
       return;
     }
-    setStudents((prev) => prev.filter(s => s.studentId !== studentToRemove.studentId));
+
+    setStudents((prev) => prev.filter((student) => student.gradeId !== studentToRemove.gradeId));
     setRemoveStudentOpen(false);
     setStudentToRemove(null);
     toast.success('Student removed');
@@ -303,7 +470,6 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex flex-wrap justify-between items-center gap-2">
@@ -331,18 +497,12 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(`/section/${sectionId}`)}
-          className="mb-6"
-        >
+        <Button variant="ghost" onClick={() => navigate(`/section/${sectionId}`)} className="mb-6">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Subjects
         </Button>
 
-        {/* Subject Header */}
         <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 mb-4 sm:mb-6">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-4">
             <div className="min-w-0">
@@ -357,22 +517,27 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
           </div>
           <div className="flex items-center space-x-6 text-sm text-gray-600">
             <div>Total Students: <span className="font-medium text-gray-900">{students.length}</span></div>
-            <div>Grading: <span className="font-medium text-gray-900">Quizzes 20% • Summative 30% • Midterm 25% • Final 25%</span></div>
+            <div>Grading: <span className="font-medium text-gray-900">CO-based Assessment Tasks (Final Wt = CO Wt × AT Wt)</span></div>
           </div>
         </div>
 
-        {/* Students Table */}
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <CardTitle>Student Grades</CardTitle>
-                <CardDescription>View and manage individual student scores. Add or remove students below.</CardDescription>
+                <CardDescription>Manage student grades per CO and assessment task.</CardDescription>
               </div>
-              <Button onClick={() => setAddStudentOpen(true)} className="bg-[#48A111] hover:bg-[#3d8f0e] shrink-0">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Student
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button variant="outline" onClick={openInviteDialog} className="shrink-0">
+                  <LinkIcon className="w-4 h-4 mr-2" />
+                  Share Invite
+                </Button>
+                <Button onClick={() => setAddStudentOpen(true)} className="bg-[#48A111] hover:bg-[#3d8f0e] shrink-0">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Student
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -382,24 +547,16 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
                   <TableRow>
                     <TableHead>Student ID</TableHead>
                     <TableHead>Name</TableHead>
-                    <TableHead className="text-center">Quizzes (20%)</TableHead>
-                    <TableHead className="text-center">Summative (30%)</TableHead>
-                    <TableHead className="text-center">Midterm (25%)</TableHead>
-                    <TableHead className="text-center">Final (25%)</TableHead>
-                    <TableHead className="text-center">Total</TableHead>
-                    <TableHead className="text-center">Grade</TableHead>
+                    <TableHead className="text-center">Final Grade (%)</TableHead>
+                    <TableHead className="text-center">Grade Number</TableHead>
                     <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {students.map((student) => (
-                    <TableRow key={student.studentId}>
+                    <TableRow key={student.gradeId}>
                       <TableCell className="font-medium">{student.studentNumber}</TableCell>
                       <TableCell>{student.studentName}</TableCell>
-                      <TableCell className="text-center">{student.quizzes}%</TableCell>
-                      <TableCell className="text-center">{student.summative}%</TableCell>
-                      <TableCell className="text-center">{student.midterm}%</TableCell>
-                      <TableCell className="text-center">{student.final}%</TableCell>
                       <TableCell className="text-center font-semibold">{student.totalGrade}%</TableCell>
                       <TableCell className="text-center">
                         <Badge className="bg-[#e8f5e0] text-[#2d6b0a] hover:bg-[#e8f5e0]">
@@ -435,65 +592,127 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
           </CardContent>
         </Card>
 
-        {/* Edit Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
           <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Subject Invite Link</DialogTitle>
+              <DialogDescription>
+                Share this link or QR code so students can join {subject.name}.
+              </DialogDescription>
+            </DialogHeader>
+
+            {inviteLoading ? (
+              <p className="text-sm text-gray-600">Preparing invite link...</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="subject-invite-link">Join Link</Label>
+                  <div className="flex gap-2">
+                    <Input id="subject-invite-link" value={inviteLink} readOnly />
+                    <Button type="button" variant="outline" onClick={handleCopyInviteLink}>
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {inviteQrUrl ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <img src={inviteQrUrl} alt="Subject invite QR code" className="h-56 w-56 rounded-md border p-2" />
+                    <p className="text-xs text-gray-500 text-center">Students can scan this QR to open the join link.</p>
+                  </div>
+                ) : null}
+
+                {inviteExpiresAt ? (
+                  <p className="text-xs text-gray-500">Expires on {new Date(inviteExpiresAt).toLocaleString()}</p>
+                ) : null}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[96vw]">
             <DialogHeader>
               <DialogTitle>Edit Student Grades</DialogTitle>
               <DialogDescription>
-                Update scores for {selectedStudent?.studentName} ({selectedStudent?.studentNumber})
+                Assign scores by CO and Assessment Task for {selectedStudent?.studentName} ({selectedStudent?.studentNumber}).
+                Total Score stays as entered. Computed Final Grade auto-computes from Score (%).
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="quizzes">Quizzes (20%)</Label>
-                <Input
-                  id="quizzes"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={editScores.quizzes}
-                  onChange={(e) => setEditScores({ ...editScores, quizzes: e.target.value })}
-                  placeholder="0-100"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="summative">Summative Tests (30%)</Label>
-                <Input
-                  id="summative"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={editScores.summative}
-                  onChange={(e) => setEditScores({ ...editScores, summative: e.target.value })}
-                  placeholder="0-100"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="midterm">Midterm Exam (25%)</Label>
-                <Input
-                  id="midterm"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={editScores.midterm}
-                  onChange={(e) => setEditScores({ ...editScores, midterm: e.target.value })}
-                  placeholder="0-100"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="final">Final Exam (25%)</Label>
-                <Input
-                  id="final"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={editScores.final}
-                  onChange={(e) => setEditScores({ ...editScores, final: e.target.value })}
-                  placeholder="0-100"
-                />
-              </div>
+
+            <div className="overflow-x-auto max-h-[60vh] border rounded-md">
+              <Table className="min-w-[980px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>CO</TableHead>
+                    <TableHead>CO Wt (%)</TableHead>
+                    <TableHead>Assessment Task</TableHead>
+                    <TableHead>AT Wt (%)</TableHead>
+                    <TableHead>Final Wt (%)</TableHead>
+                    <TableHead>Score (%)</TableHead>
+                    <TableHead>Total Score</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {CO_ASSESSMENT_TASKS.map((task) => {
+                    const score = Number.isFinite(parseFloat(editScores[task.taskKey]))
+                      ? parseFloat(editScores[task.taskKey])
+                      : 0;
+                    const finalWeight = finalWeightPercent(task);
+
+                    return (
+                      <TableRow key={task.taskKey}>
+                        <TableCell>{task.co}</TableCell>
+                        <TableCell>{task.coWeight.toFixed(2)}%</TableCell>
+                        <TableCell>{task.assessmentTask}</TableCell>
+                        <TableCell>{task.atWeight.toFixed(2)}%</TableCell>
+                        <TableCell>{finalWeight.toFixed(2)}%</TableCell>
+                        <TableCell className="w-[150px]">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={editScores[task.taskKey] ?? '0'}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setEditScores((prev) => ({ ...prev, [task.taskKey]: value }));
+                            }}
+                            placeholder="0-100"
+                          />
+                        </TableCell>
+                        <TableCell className="w-[150px]">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={editTotalScores[task.taskKey] ?? '0'}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setEditTotalScores((prev) => ({ ...prev, [task.taskKey]: value }));
+                            }}
+                            placeholder="0-100"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
+
+            <div className="flex justify-between items-center py-3 px-4 rounded-lg bg-[#e8f5e0]">
+              <span className="font-semibold text-gray-900">Computed Final Grade</span>
+              <span className="font-semibold text-[#48A111] text-lg">
+                {computedEditTotal}% ({formatGradePoint5(computedEditTotal)})
+              </span>
+            </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                 Cancel
@@ -505,68 +724,23 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
           </DialogContent>
         </Dialog>
 
-        {/* Add Student Dialog */}
         <Dialog open={addStudentOpen} onOpenChange={setAddStudentOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Add Student</DialogTitle>
-              <DialogDescription>Enter the student&apos;s ID number. Only registered students (with that ID in the system) can be added. If no student has that ID, they will not be added.</DialogDescription>
+              <DialogDescription>
+                Enter the student&apos;s ID number. Assessment task records will be auto-created with initial score 0.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="add-student-number">Student ID number (required)</Label>
                 <Input
                   id="add-student-number"
-                  value={addStudentForm.studentNumber}
-                  onChange={(e) => setAddStudentForm((f) => ({ ...f, studentNumber: e.target.value }))}
+                  value={addStudentNumber}
+                  onChange={(event) => setAddStudentNumber(event.target.value)}
                   placeholder="e.g. STU001 (must match a registered student)"
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="add-quizzes">Quizzes (20%)</Label>
-                  <Input
-                    id="add-quizzes"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={addStudentForm.quizzes}
-                    onChange={(e) => setAddStudentForm((f) => ({ ...f, quizzes: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="add-summative">Summative (30%)</Label>
-                  <Input
-                    id="add-summative"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={addStudentForm.summative}
-                    onChange={(e) => setAddStudentForm((f) => ({ ...f, summative: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="add-midterm">Midterm (25%)</Label>
-                  <Input
-                    id="add-midterm"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={addStudentForm.midterm}
-                    onChange={(e) => setAddStudentForm((f) => ({ ...f, midterm: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="add-final">Final (25%)</Label>
-                  <Input
-                    id="add-final"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={addStudentForm.final}
-                    onChange={(e) => setAddStudentForm((f) => ({ ...f, final: e.target.value }))}
-                  />
-                </div>
               </div>
             </div>
             <DialogFooter>
@@ -580,13 +754,13 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
           </DialogContent>
         </Dialog>
 
-        {/* Remove Student Confirmation */}
         <AlertDialog open={removeStudentOpen} onOpenChange={setRemoveStudentOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Remove student?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will remove &quot;{studentToRemove?.studentName}&quot; ({studentToRemove?.studentNumber}) from this subject. Their grade record will be deleted. This cannot be undone.
+                This will remove &quot;{studentToRemove?.studentName}&quot; ({studentToRemove?.studentNumber}) from this subject.
+                Their grade record and assessment task scores will be deleted. This cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

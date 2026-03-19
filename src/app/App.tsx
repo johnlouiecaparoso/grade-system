@@ -7,6 +7,7 @@ import SectionSubjects from './components/SectionSubjects';
 import InstructorSubjectView from './components/InstructorSubjectView';
 import Profile from './components/Profile';
 import SubjectDetail from './components/SubjectDetail';
+import JoinSubject from './components/JoinSubject';
 import { Toaster } from './components/ui/sonner';
 import { useAuth } from './contexts/AuthContext';
 
@@ -64,6 +65,10 @@ function App() {
         <Route 
           path="/subject/:subjectId" 
           element={isAuthenticated && userRole === 'student' ? <SubjectDetail onLogout={handleLogout} /> : <Navigate to="/login" />} 
+        />
+        <Route
+          path="/join/:token"
+          element={isAuthenticated && userRole === 'student' ? <JoinSubject onLogout={handleLogout} /> : <Navigate to="/login" />}
         />
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

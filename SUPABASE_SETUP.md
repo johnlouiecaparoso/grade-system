@@ -22,6 +22,8 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 2. Open `supabase/schema.sql` in this repo and copy its full contents.
 3. Paste into a new query and click **Run**.
 
+If you already have an existing database, also run the migration in `supabase/migrations/add_subject_invites.sql`.
+
 This creates:
 
 - **profiles** – linked to auth users (role: student | instructor, student_number)
