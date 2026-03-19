@@ -34,10 +34,15 @@ export function createEmptyAssessmentScores(): Record<string, number> {
   }, {});
 }
 
-export function calculateTotalGradePercent(scoresByTaskKey: Record<string, number>): number {
+export function calculateTotalGradePercent(
+  scoresByTaskKey: Record<string, number>,
+  totalScoresByTaskKey: Record<string, number> = {}
+): number {
   const total = CO_ASSESSMENT_TASKS.reduce((sum, task) => {
     const score = Number(scoresByTaskKey[task.taskKey] ?? 0);
-    return sum + (score * finalWeightPercent(task)) / 100;
+    const totalScore = Number(totalScoresByTaskKey[task.taskKey] ?? 1); // default to 1 to avoid division by zero
+    const normalized = totalScore > 0 ? score / totalScore : 0;
+    return sum + normalized * finalWeightPercent(task);
   }, 0);
 
   return Math.round(total);

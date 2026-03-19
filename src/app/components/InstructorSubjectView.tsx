@@ -205,7 +205,7 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
         return {
           ...student,
           assessmentScores,
-          totalGrade: hasAnyScore ? calculateTotalGradePercent(assessmentScores) : student.totalGrade,
+          totalGrade: hasAnyScore ? calculateTotalGradePercent(assessmentScores, subjectTotalScores) : student.totalGrade,
         };
       });
 
@@ -214,8 +214,8 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
   }, [sectionId, subjectId]);
 
   const computedEditTotal = useMemo(() => {
-    return calculateTotalGradePercent(toNumericScoreMap(editScores));
-  }, [editScores]);
+    return calculateTotalGradePercent(toNumericScoreMap(editScores), toNumericScoreMap(editTotalScores));
+  }, [editScores, editTotalScores]);
 
   const inviteLink = useMemo(() => {
     if (!inviteToken) return '';
@@ -240,7 +240,7 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
     const numericScores = toNumericScoreMap(editScores);
     const numericTotalScores = toNumericScoreMap(editTotalScores);
 
-    const totalGrade = calculateTotalGradePercent(numericScores);
+    const totalGrade = calculateTotalGradePercent(numericScores, numericTotalScores);
     const scorePayload = CO_ASSESSMENT_TASKS.map((task) => ({
       grade_id: selectedStudent.gradeId,
       task_key: task.taskKey,

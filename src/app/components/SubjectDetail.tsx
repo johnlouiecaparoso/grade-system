@@ -100,7 +100,7 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
         code: subjectRecord.code,
         instructor: 'Instructor',
         credits: subjectRecord.credits ?? 0,
-        totalGrade: hasAnyScore ? calculateTotalGradePercent(assessmentScores) : Number(grade.total_grade),
+        totalGrade: hasAnyScore ? calculateTotalGradePercent(assessmentScores, assessmentTotalScores) : Number(grade.total_grade),
         assessmentScores,
         assessmentTotalScores,
       });
