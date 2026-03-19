@@ -57,7 +57,8 @@ interface Section {
 
 function toInputScoreMap(scores: Record<string, number>): Record<string, string> {
   return CO_ASSESSMENT_TASKS.reduce<Record<string, string>>((acc, task) => {
-    acc[task.taskKey] = String(scores[task.taskKey] ?? 0);
+    const score = Number(scores[task.taskKey] ?? 0);
+    acc[task.taskKey] = score === 0 ? '' : String(score);
     return acc;
   }, {});
 }
@@ -70,22 +71,11 @@ function toNumericScoreMap(scores: Record<string, string>): Record<string, numbe
   }, {});
 }
 
-function toInputTotalScoreMap(scores: Record<string, number>): Record<string, string> {
+function createEmptyInputScoreMap(): Record<string, string> {
   return CO_ASSESSMENT_TASKS.reduce<Record<string, string>>((acc, task) => {
-    const score = Number(scores[task.taskKey] ?? 0);
-    const totalScore = (score * finalWeightPercent(task)) / 100;
-    acc[task.taskKey] = totalScore.toFixed(2);
+    acc[task.taskKey] = '';
     return acc;
   }, {});
-}
-
-function calculateTotalGradeFromTotalScores(totalScores: Record<string, string>): number {
-  const total = CO_ASSESSMENT_TASKS.reduce((sum, task) => {
-    const parsed = parseFloat(totalScores[task.taskKey]);
-    return sum + (Number.isFinite(parsed) ? parsed : 0);
-  }, 0);
-
-  return Math.round(total);
 }
 
 export default function InstructorSubjectView({ onLogout }: InstructorSubjectViewProps) {
@@ -94,11 +84,12 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
   const { user, profile } = useAuth();
   const [section, setSection] = useState<Section | null>(null);
   const [subject, setSubject] = useState<Subject | null>(null);
+  const [subjectTotalScores, setSubjectTotalScores] = useState<Record<string, number>>(createEmptyAssessmentScores());
   const [students, setStudents] = useState<StudentGrade[]>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentGrade | null>(null);
   const [editScores, setEditScores] = useState<Record<string, string>>(toInputScoreMap(createEmptyAssessmentScores()));
-  const [editTotalScores, setEditTotalScores] = useState<Record<string, string>>(toInputTotalScoreMap(createEmptyAssessmentScores()));
+  const [editTotalScores, setEditTotalScores] = useState<Record<string, string>>(createEmptyInputScoreMap());
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [removeStudentOpen, setRemoveStudentOpen] = useState(false);
   const [studentToRemove, setStudentToRemove] = useState<StudentGrade | null>(null);
@@ -139,6 +130,20 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
           code: subjectData.code,
           credits: subjectData.credits ?? 0,
         });
+      }
+
+      const { data: totalScoreRows, error: totalScoreError } = await supabase
+        .from('subject_assessment_total_scores')
+        .select('task_key, total_score')
+        .eq('subject_id', subjectId);
+
+      if (!totalScoreError) {
+        const totalScores = createEmptyAssessmentScores();
+        for (const row of totalScoreRows || []) {
+          const record = row as { task_key: string; total_score: number };
+          totalScores[record.task_key] = Number(record.total_score ?? 0);
+        }
+        setSubjectTotalScores(totalScores);
       }
 
       const { data: gradesData, error: gradesError } = await supabase
@@ -225,23 +230,15 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
   const handleEditClick = (student: StudentGrade) => {
     setSelectedStudent(student);
     setEditScores(toInputScoreMap(student.assessmentScores));
-    setEditTotalScores(toInputTotalScoreMap(student.assessmentScores));
+    setEditTotalScores(toInputScoreMap(subjectTotalScores));
     setIsEditDialogOpen(true);
   };
 
   const handleSaveGrades = async () => {
-    if (!selectedStudent) return;
+    if (!selectedStudent || !subjectId) return;
 
     const numericScores = toNumericScoreMap(editScores);
-    const invalid = CO_ASSESSMENT_TASKS.some((task) => {
-      const value = numericScores[task.taskKey];
-      return Number.isNaN(value) || value < 0 || value > 100;
-    });
-
-    if (invalid) {
-      toast.error('All assessment scores must be between 0 and 100');
-      return;
-    }
+    const numericTotalScores = toNumericScoreMap(editTotalScores);
 
     const totalGrade = calculateTotalGradePercent(numericScores);
     const scorePayload = CO_ASSESSMENT_TASKS.map((task) => ({
@@ -249,6 +246,21 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
       task_key: task.taskKey,
       score: numericScores[task.taskKey],
     }));
+
+    const totalScorePayload = CO_ASSESSMENT_TASKS.map((task) => ({
+      subject_id: subjectId,
+      task_key: task.taskKey,
+      total_score: numericTotalScores[task.taskKey],
+    }));
+
+    const { error: totalScoreError } = await supabase
+      .from('subject_assessment_total_scores')
+      .upsert(totalScorePayload, { onConflict: 'subject_id,task_key' });
+
+    if (totalScoreError) {
+      toast.error(totalScoreError.message);
+      return;
+    }
 
     const { error: scoreError } = await supabase
       .from('grade_assessment_scores')
@@ -276,10 +288,11 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
           : student
       )
     );
+    setSubjectTotalScores(numericTotalScores);
 
     setIsEditDialogOpen(false);
     setSelectedStudent(null);
-    toast.success('Student assessment grades updated successfully');
+    toast.success('Student grades and subject total scores updated successfully');
   };
 
   const handleAddStudent = async () => {
@@ -642,7 +655,7 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
               <DialogTitle>Edit Student Grades</DialogTitle>
               <DialogDescription>
                 Assign scores by CO and Assessment Task for {selectedStudent?.studentName} ({selectedStudent?.studentNumber}).
-                Total Score stays as entered. Computed Final Grade auto-computes from Score (%).
+                Total Score is saved per subject task, stays editable, and is shared across all enrolled students.
               </DialogDescription>
             </DialogHeader>
 
@@ -655,15 +668,12 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
                     <TableHead>Assessment Task</TableHead>
                     <TableHead>AT Wt (%)</TableHead>
                     <TableHead>Final Wt (%)</TableHead>
-                    <TableHead>Score (%)</TableHead>
                     <TableHead>Total Score</TableHead>
+                    <TableHead>Score</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {CO_ASSESSMENT_TASKS.map((task) => {
-                    const score = Number.isFinite(parseFloat(editScores[task.taskKey]))
-                      ? parseFloat(editScores[task.taskKey])
-                      : 0;
                     const finalWeight = finalWeightPercent(task);
 
                     return (
@@ -676,27 +686,25 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
                         <TableCell className="w-[150px]">
                           <Input
                             type="number"
-                            min="0"
-                            max="100"
-                            value={editScores[task.taskKey] ?? '0'}
+                            step="any"
+                            value={editTotalScores[task.taskKey] ?? ''}
                             onChange={(event) => {
                               const value = event.target.value;
-                              setEditScores((prev) => ({ ...prev, [task.taskKey]: value }));
+                              setEditTotalScores((prev) => ({ ...prev, [task.taskKey]: value }));
                             }}
-                            placeholder="0-100"
+                            placeholder="Enter total score"
                           />
                         </TableCell>
                         <TableCell className="w-[150px]">
                           <Input
                             type="number"
-                            min="0"
-                            max="100"
-                            value={editTotalScores[task.taskKey] ?? '0'}
+                            step="any"
+                            value={editScores[task.taskKey] ?? ''}
                             onChange={(event) => {
                               const value = event.target.value;
-                              setEditTotalScores((prev) => ({ ...prev, [task.taskKey]: value }));
+                              setEditScores((prev) => ({ ...prev, [task.taskKey]: value }));
                             }}
-                            placeholder="0-100"
+                            placeholder="Enter score"
                           />
                         </TableCell>
                       </TableRow>

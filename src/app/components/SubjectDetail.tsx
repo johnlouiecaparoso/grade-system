@@ -29,6 +29,7 @@ interface Subject {
   credits: number;
   totalGrade: number;
   assessmentScores: Record<string, number>;
+  assessmentTotalScores: Record<string, number>;
 }
 
 export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
@@ -74,10 +75,21 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
         .select('task_key, score')
         .eq('grade_id', grade.id);
 
+      const { data: totalScoreRows } = await supabase
+        .from('subject_assessment_total_scores')
+        .select('task_key, total_score')
+        .eq('subject_id', subjectId);
+
       const assessmentScores = createEmptyAssessmentScores();
       for (const row of scoreRows || []) {
         const record = row as { task_key: string; score: number };
         assessmentScores[record.task_key] = Number(record.score ?? 0);
+      }
+
+      const assessmentTotalScores = createEmptyAssessmentScores();
+      for (const row of totalScoreRows || []) {
+        const record = row as { task_key: string; total_score: number };
+        assessmentTotalScores[record.task_key] = Number(record.total_score ?? 0);
       }
 
       const hasAnyScore = CO_ASSESSMENT_TASKS.some((task) => assessmentScores[task.taskKey] > 0);
@@ -90,6 +102,7 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
         credits: subjectRecord.credits ?? 0,
         totalGrade: hasAnyScore ? calculateTotalGradePercent(assessmentScores) : Number(grade.total_grade),
         assessmentScores,
+        assessmentTotalScores,
       });
     })();
   }, [subjectId, user?.id, user?.studentId]);
@@ -100,13 +113,12 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
     return CO_ASSESSMENT_TASKS.map((task) => {
       const score = Number(subject.assessmentScores[task.taskKey] ?? 0);
       const finalWeight = finalWeightPercent(task);
-      const contribution = (score * finalWeight) / 100;
 
       return {
         task,
         score,
+        totalScore: Number(subject.assessmentTotalScores[task.taskKey] ?? 0),
         finalWeight,
-        contribution,
       };
     });
   }, [subject]);
@@ -166,13 +178,13 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
               <div className="text-3xl sm:text-4xl font-semibold text-[#48A111] mb-1">
                 {formatGradePoint5(subject.totalGrade)}
               </div>
-              <p className="text-gray-600">{subject.totalGrade}%</p>
+              <p className="text-gray-600">Final Grade Scale</p>
             </div>
           </div>
           <div>
             <div className="flex justify-between text-sm mb-2">
-              <span className="text-gray-600">Final Grade Progress</span>
-              <span className="font-medium">{subject.totalGrade}%</span>
+              <span className="text-gray-600">Final Grade Scale</span>
+              <span className="font-medium">{formatGradePoint5(subject.totalGrade)}</span>
             </div>
             <Progress value={subject.totalGrade} className="h-3" />
           </div>
@@ -195,6 +207,7 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
                     <TableHead>CO Wt (%)</TableHead>
                     <TableHead>AT Wt (%)</TableHead>
                     <TableHead>Final Wt (%)</TableHead>
+                    <TableHead>Total Score</TableHead>
                     <TableHead>Score</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -207,6 +220,9 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
                       <TableCell>{row.task.atWeight.toFixed(2)}%</TableCell>
                       <TableCell>{row.finalWeight.toFixed(2)}%</TableCell>
                       <TableCell>
+                        <Badge variant="secondary">{row.totalScore.toFixed(2)}</Badge>
+                      </TableCell>
+                      <TableCell>
                         <Badge variant="secondary">{row.score.toFixed(2)}</Badge>
                       </TableCell>
                     </TableRow>
@@ -218,7 +234,7 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
             <div className="flex justify-between items-center py-3 bg-[#e8f5e0] px-4 rounded-lg mt-6">
               <span className="font-semibold text-gray-900">Final Grade</span>
               <span className="font-semibold text-[#48A111] text-lg">
-                {subject.totalGrade}% ({formatGradePoint5(subject.totalGrade)})
+                {formatGradePoint5(subject.totalGrade)}
               </span>
             </div>
           </CardContent>

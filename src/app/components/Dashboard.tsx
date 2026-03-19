@@ -199,8 +199,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <div className="space-y-4">
                   <div>
                     <div className="flex justify-between text-sm mb-2">
-                      <span className="text-gray-600">Final Grade</span>
-                      <span className="font-medium">{subject.totalGrade}%</span>
+                      <span className="text-gray-600">Final Grade Scale</span>
+                      <span className="font-medium">{formatGradePoint5(subject.totalGrade)}</span>
                     </div>
                     <Progress value={subject.totalGrade} className="h-2" />
                   </div>

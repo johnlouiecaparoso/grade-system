@@ -99,7 +99,20 @@ CREATE TABLE IF NOT EXISTS public.grade_assessment_scores (
 );
 
 -- ------------------------------------------------------------
--- 6. SUBJECT INVITES (instructor share link/QR for student self-enrollment)
+-- 6. SUBJECT ASSESSMENT TOTAL SCORES (per-subject, per-task max/total score)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.subject_assessment_total_scores (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+  task_key TEXT NOT NULL,
+  total_score NUMERIC(10,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (subject_id, task_key)
+);
+
+-- ------------------------------------------------------------
+-- 7. SUBJECT INVITES (instructor share link/QR for student self-enrollment)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.subject_invites (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -154,6 +167,7 @@ ALTER TABLE public.sections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.grades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.grade_assessment_scores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subject_assessment_total_scores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subject_invites ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: users can read/update own profile; instructors can read all (for dropdowns)
@@ -223,6 +237,15 @@ CREATE POLICY "Students read own assessment scores" ON public.grade_assessment_s
       )
     )
   );
+
+-- Subject assessment total scores: instructors manage; authenticated users read
+DROP POLICY IF EXISTS "Instructors manage subject assessment total scores" ON public.subject_assessment_total_scores;
+CREATE POLICY "Instructors manage subject assessment total scores" ON public.subject_assessment_total_scores
+  FOR ALL USING (public.get_my_profile_role() = 'instructor');
+
+DROP POLICY IF EXISTS "Authenticated users read subject assessment total scores" ON public.subject_assessment_total_scores;
+CREATE POLICY "Authenticated users read subject assessment total scores" ON public.subject_assessment_total_scores
+  FOR SELECT TO authenticated USING (true);
 
 -- Subject invites: instructors manage all; students can read only active + non-expired (for join screen)
 DROP POLICY IF EXISTS "Instructors manage subject invites" ON public.subject_invites;
@@ -351,6 +374,11 @@ CREATE TRIGGER grades_updated_at
 DROP TRIGGER IF EXISTS grade_assessment_scores_updated_at ON public.grade_assessment_scores;
 CREATE TRIGGER grade_assessment_scores_updated_at
   BEFORE UPDATE ON public.grade_assessment_scores
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS subject_assessment_total_scores_updated_at ON public.subject_assessment_total_scores;
+CREATE TRIGGER subject_assessment_total_scores_updated_at
+  BEFORE UPDATE ON public.subject_assessment_total_scores
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- ------------------------------------------------------------
