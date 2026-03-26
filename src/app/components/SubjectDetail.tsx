@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
@@ -12,7 +12,6 @@ import {
   calculateTotalGradePercent,
   CO_ASSESSMENT_TASKS,
   createEmptyAssessmentScores,
-  finalWeightPercent,
   formatGradePoint5,
 } from '../../lib/grades';
 import { UserAvatar } from './UserAvatar';
@@ -61,7 +60,9 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
       const grade = gradeData as {
         id: string;
         total_grade: number;
-        subjects: { id: string; name: string; code: string; credits: number }[] | { id: string; name: string; code: string; credits: number };
+        subjects:
+          | { id: string; name: string; code: string; credits: number }[]
+          | { id: string; name: string; code: string; credits: number };
       };
 
       const subjectRecord = Array.isArray(grade.subjects) ? grade.subjects[0] : grade.subjects;
@@ -110,17 +111,11 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
   const assessmentRows = useMemo(() => {
     if (!subject) return [];
 
-    return CO_ASSESSMENT_TASKS.map((task) => {
-      const score = Number(subject.assessmentScores[task.taskKey] ?? 0);
-      const finalWeight = finalWeightPercent(task);
-
-      return {
-        task,
-        score,
-        totalScore: Number(subject.assessmentTotalScores[task.taskKey] ?? 0),
-        finalWeight,
-      };
-    });
+    return CO_ASSESSMENT_TASKS.map((task) => ({
+      task,
+      score: Number(subject.assessmentScores[task.taskKey] ?? 0),
+      totalScore: Number(subject.assessmentTotalScores[task.taskKey] ?? 0),
+    }));
   }, [subject]);
 
   if (!subject) {
@@ -192,21 +187,14 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>CO and Assessment Tasks</CardTitle>
-            <CardDescription>
-              Final grade is computed using Final Wt (%) = CO Wt (%) × AT Wt (%)
-            </CardDescription>
+            <CardTitle>Assessment Tasks</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <Table className="min-w-[900px]">
+              <Table className="min-w-[520px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[68px] sm:w-auto whitespace-nowrap">CO</TableHead>
-                    <TableHead className="w-[170px] sm:w-auto">Assessment Task</TableHead>
-                    <TableHead>CO Wt (%)</TableHead>
-                    <TableHead>AT Wt (%)</TableHead>
-                    <TableHead>Final Wt (%)</TableHead>
+                    <TableHead className="w-[220px] sm:w-auto">Assessment Task</TableHead>
                     <TableHead>Total Score</TableHead>
                     <TableHead>Score</TableHead>
                   </TableRow>
@@ -214,11 +202,7 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
                 <TableBody>
                   {assessmentRows.map((row) => (
                     <TableRow key={row.task.taskKey}>
-                      <TableCell className="w-[68px] sm:w-auto whitespace-nowrap">{row.task.co}</TableCell>
-                      <TableCell className="w-[170px] sm:w-auto">{row.task.assessmentTask}</TableCell>
-                      <TableCell>{row.task.coWeight.toFixed(2)}%</TableCell>
-                      <TableCell>{row.task.atWeight.toFixed(2)}%</TableCell>
-                      <TableCell>{row.finalWeight.toFixed(2)}%</TableCell>
+                      <TableCell className="w-[220px] sm:w-auto">{row.task.assessmentTask}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{row.totalScore.toFixed(2)}</Badge>
                       </TableCell>
