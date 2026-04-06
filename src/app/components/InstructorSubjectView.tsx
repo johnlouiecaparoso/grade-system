@@ -55,10 +55,6 @@ interface Section {
   section: string;
 }
 
-const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
-const INVITE_REFRESH_THRESHOLD_MS = 60 * 60 * 1000;
-const INVITE_REFRESH_INTERVAL_MS = 60 * 1000;
-
 function toInputScoreMap(scores: Record<string, number>): Record<string, string> {
   return CO_ASSESSMENT_TASKS.reduce<Record<string, string>>((acc, task) => {
     const score = Number(scores[task.taskKey] ?? 0);
@@ -231,6 +227,80 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
     return `https://quickchart.io/qr?size=240&text=${encodeURIComponent(inviteLink)}`;
   }, [inviteLink]);
 
+  const createNewInvite = useCallback(async () => {
+    if (!subjectId || !user?.id) return null;
+
+    const token = crypto.randomUUID().replace(/-/g, '');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    await supabase
+      .from('subject_invites')
+      .update({ is_active: false })
+      .eq('subject_id', subjectId)
+      .eq('is_active', true);
+
+    const { data: newInvite, error: createError } = await supabase
+      .from('subject_invites')
+      .insert({
+        subject_id: subjectId,
+        token,
+        created_by: user.id,
+        expires_at: expiresAt,
+        is_active: true,
+      })
+      .select('token, expires_at')
+      .single();
+
+    if (createError) {
+      throw createError;
+    }
+
+    return newInvite;
+  }, [subjectId, user?.id]);
+
+  const syncInvite = useCallback(async (forceNew = false) => {
+    if (!subjectId || !user?.id) return;
+
+    setInviteLoading(true);
+
+    try {
+      if (!forceNew) {
+        const nowIso = new Date().toISOString();
+        const { data: existingInvite, error: existingError } = await supabase
+          .from('subject_invites')
+          .select('token, expires_at')
+          .eq('subject_id', subjectId)
+          .eq('is_active', true)
+          .gt('expires_at', nowIso)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingError) {
+          throw existingError;
+        }
+
+        if (existingInvite) {
+          setInviteToken(existingInvite.token);
+          setInviteExpiresAt(existingInvite.expires_at);
+          setInviteLoading(false);
+          return;
+        }
+      }
+
+      const freshInvite = await createNewInvite();
+      if (freshInvite) {
+        setInviteToken(freshInvite.token);
+        setInviteExpiresAt(freshInvite.expires_at);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not prepare invite link';
+      toast.error(message);
+    } finally {
+      setInviteLoading(false);
+    }
+  }, [createNewInvite, subjectId, user?.id]);
+
   const handleEditClick = (student: StudentGrade) => {
     setSelectedStudent(student);
     setEditScores(toInputScoreMap(student.assessmentScores));
@@ -379,113 +449,29 @@ export default function InstructorSubjectView({ onLogout }: InstructorSubjectVie
     toast.success('Student added');
   };
 
-  const ensureActiveInvite = useCallback(async (options?: { silent?: boolean }) => {
-    if (!subjectId || !user?.id) return;
-
-    const silent = options?.silent ?? false;
-    if (!silent) {
-      setInviteLoading(true);
-    }
-
-    const now = Date.now();
-    const nowIso = new Date(now).toISOString();
-    const nextExpiresAt = new Date(now + INVITE_LIFETIME_MS).toISOString();
-
-    const { data: existingInvite, error: existingError } = await supabase
-      .from('subject_invites')
-      .select('id, token, expires_at')
-      .eq('subject_id', subjectId)
-      .eq('is_active', true)
-      .gt('expires_at', nowIso)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existingError) {
-      toast.error(existingError.message);
-      if (!silent) {
-        setInviteLoading(false);
-      }
-      return;
-    }
-
-    if (existingInvite) {
-      let nextInvite = existingInvite;
-      const expiresAtMs = new Date(existingInvite.expires_at).getTime();
-
-      if (!Number.isNaN(expiresAtMs) && expiresAtMs - now <= INVITE_REFRESH_THRESHOLD_MS) {
-        const { data: renewedInvite, error: renewError } = await supabase
-          .from('subject_invites')
-          .update({ expires_at: nextExpiresAt })
-          .eq('id', existingInvite.id)
-          .select('id, token, expires_at')
-          .single();
-
-        if (renewError) {
-          toast.error(renewError.message);
-          if (!silent) {
-            setInviteLoading(false);
-          }
-          return;
-        }
-
-        nextInvite = renewedInvite;
-      }
-
-      setInviteToken(nextInvite.token);
-      setInviteExpiresAt(nextInvite.expires_at);
-
-      if (!silent) {
-        setInviteLoading(false);
-      }
-      return;
-    }
-
-    const token = crypto.randomUUID().replace(/-/g, '');
-    const { data: newInvite, error: createError } = await supabase
-      .from('subject_invites')
-      .insert({
-        subject_id: subjectId,
-        token,
-        created_by: user.id,
-        expires_at: nextExpiresAt,
-        is_active: true,
-      })
-      .select('token, expires_at')
-      .single();
-
-    if (createError) {
-      toast.error(createError.message);
-      if (!silent) {
-        setInviteLoading(false);
-      }
-      return;
-    }
-
-    setInviteToken(newInvite.token);
-    setInviteExpiresAt(newInvite.expires_at);
-
-    if (!silent) {
-      setInviteLoading(false);
-    }
-  }, [subjectId, user?.id]);
-
   const openInviteDialog = async () => {
     setInviteDialogOpen(true);
-    await ensureActiveInvite();
+    await syncInvite(false);
   };
 
   useEffect(() => {
-    if (!inviteDialogOpen) return;
+    if (!inviteDialogOpen || !inviteExpiresAt) return;
 
-    const intervalId = window.setInterval(() => {
-      void ensureActiveInvite({ silent: true });
-    }, INVITE_REFRESH_INTERVAL_MS);
+    const msUntilExpiry = new Date(inviteExpiresAt).getTime() - Date.now();
+
+    if (msUntilExpiry <= 0) {
+      void syncInvite(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void syncInvite(true);
+    }, msUntilExpiry + 1000);
 
     return () => {
-      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
     };
-  }, [inviteDialogOpen, ensureActiveInvite]);
+  }, [inviteDialogOpen, inviteExpiresAt, syncInvite]);
 
   const handleCopyInviteLink = async () => {
     if (!inviteLink) return;

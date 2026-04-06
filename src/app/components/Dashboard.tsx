@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
-import { GraduationCap, BookOpen, TrendingUp, User, LogOut } from 'lucide-react';
+import { GraduationCap, BookOpen, TrendingUp, User, LogOut, ScanLine } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { formatGradePoint5 } from '../../lib/grades';
@@ -175,6 +175,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-semibold text-gray-900">Your Subjects</h3>
+          <Button variant="outline" size="sm" onClick={() => navigate('/join')}>
+            <ScanLine className="w-4 h-4 mr-2" />
+            Scan Subject QR
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

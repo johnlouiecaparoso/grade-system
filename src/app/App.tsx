@@ -67,6 +67,10 @@ function App() {
           element={isAuthenticated && userRole === 'student' ? <SubjectDetail onLogout={handleLogout} /> : <Navigate to="/login" />} 
         />
         <Route
+          path="/join"
+          element={isAuthenticated && userRole === 'student' ? <JoinSubject onLogout={handleLogout} /> : <Navigate to="/login" />}
+        />
+        <Route
           path="/join/:token"
           element={isAuthenticated && userRole === 'student' ? <JoinSubject onLogout={handleLogout} /> : <Navigate to="/login" />}
         />

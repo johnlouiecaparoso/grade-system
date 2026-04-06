@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { GraduationCap, LogOut, User } from 'lucide-react';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { GraduationCap, LogOut, ScanLine, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { UserAvatar } from './UserAvatar';
@@ -23,19 +25,29 @@ export default function JoinSubject({ onLogout }: JoinSubjectProps) {
   const navigate = useNavigate();
   const { token } = useParams();
   const { user, profile } = useAuth();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteExpiresAt, setInviteExpiresAt] = useState('');
   const [inviteSubject, setInviteSubject] = useState<InviteSubject | null>(null);
+  const [manualToken, setManualToken] = useState('');
+  const [scannerSupported, setScannerSupported] = useState(false);
+  const [scannerActive, setScannerActive] = useState(false);
+  const [scannerError, setScannerError] = useState('');
 
   useEffect(() => {
     if (!token) {
-      setInviteError('Invite token is missing.');
+      setInviteError('');
       setLoading(false);
       return;
     }
+
+    setLoading(true);
+    setInviteError('');
 
     (async () => {
       const nowIso = new Date().toISOString();
@@ -69,6 +81,123 @@ export default function JoinSubject({ onLogout }: JoinSubjectProps) {
       setLoading(false);
     })();
   }, [token]);
+
+  useEffect(() => {
+    setScannerSupported('BarcodeDetector' in window && !!navigator.mediaDevices?.getUserMedia);
+  }, []);
+
+  const stopScanner = () => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    setScannerActive(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopScanner();
+    };
+  }, []);
+
+  const extractTokenFromScan = (rawValue: string) => {
+    const value = rawValue.trim();
+    if (!value) return '';
+
+    const joinMatch = value.match(/\/join\/([a-zA-Z0-9_-]+)/);
+    if (joinMatch?.[1]) return joinMatch[1];
+
+    const tokenMatch = value.match(/^[a-zA-Z0-9_-]{16,}$/);
+    if (tokenMatch) return value;
+
+    return '';
+  };
+
+  const startScanner = async () => {
+    if (!scannerSupported) {
+      setScannerError('Scanner is not supported on this device/browser.');
+      return;
+    }
+
+    setScannerError('');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+        },
+      });
+
+      if (!videoRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+
+      const BarcodeDetectorCtor = (window as Window & {
+        BarcodeDetector?: new (options?: { formats?: string[] }) => { detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>> };
+      }).BarcodeDetector;
+
+      if (!BarcodeDetectorCtor) {
+        setScannerError('Barcode scanner is not available in this browser.');
+        stopScanner();
+        return;
+      }
+
+      const detector = new BarcodeDetectorCtor({ formats: ['qr_code'] });
+      setScannerActive(true);
+
+      const scan = async () => {
+        if (!videoRef.current) {
+          stopScanner();
+          return;
+        }
+
+        try {
+          const codes = await detector.detect(videoRef.current);
+          const rawValue = codes[0]?.rawValue ?? '';
+          if (rawValue) {
+            const detectedToken = extractTokenFromScan(rawValue);
+            if (detectedToken) {
+              stopScanner();
+              navigate(`/join/${detectedToken}`);
+              return;
+            }
+          }
+        } catch {
+          // Keep scanner alive on transient frame errors.
+        }
+
+        rafRef.current = requestAnimationFrame(() => {
+          void scan();
+        });
+      };
+
+      void scan();
+    } catch {
+      setScannerError('Could not access camera. Please allow camera permission or enter the token manually.');
+      stopScanner();
+    }
+  };
+
+  const handleManualJoin = () => {
+    const parsedToken = extractTokenFromScan(manualToken);
+    if (!parsedToken) {
+      toast.error('Enter a valid join token or join link.');
+      return;
+    }
+
+    navigate(`/join/${parsedToken}`);
+  };
 
   const handleLogout = () => {
     onLogout();
@@ -132,10 +261,54 @@ export default function JoinSubject({ onLogout }: JoinSubjectProps) {
         <Card>
           <CardHeader>
             <CardTitle>Join Subject</CardTitle>
-            <CardDescription>Confirm this invite to enroll in the subject.</CardDescription>
+            <CardDescription>{token ? 'Confirm this invite to enroll in the subject.' : 'Scan your instructor QR code or paste a join token.'}</CardDescription>
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {!token ? (
+              <div className="space-y-5">
+                <div className="rounded-lg border p-4 bg-gray-50 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-gray-700">QR Scanner</p>
+                    <Badge className="bg-[#e8f5e0] text-[#2d6b0a] hover:bg-[#e8f5e0]">Student access</Badge>
+                  </div>
+
+                  <div className="rounded-md border bg-black/90 overflow-hidden">
+                    <video ref={videoRef} className="w-full h-56 object-cover" muted playsInline />
+                  </div>
+
+                  {scannerError ? <p className="text-xs text-red-600">{scannerError}</p> : null}
+
+                  <div className="flex gap-2">
+                    {scannerActive ? (
+                      <Button variant="outline" onClick={stopScanner}>
+                        Stop Scanner
+                      </Button>
+                    ) : (
+                      <Button onClick={() => void startScanner()} className="bg-[#48A111] hover:bg-[#3d8f0e]" disabled={!scannerSupported}>
+                        <ScanLine className="w-4 h-4 mr-2" />
+                        Start Scanner
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={() => navigate('/dashboard')}>
+                      Back to Dashboard
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="manual-token">Or enter invite token/link manually</Label>
+                  <Input
+                    id="manual-token"
+                    value={manualToken}
+                    onChange={(event) => setManualToken(event.target.value)}
+                    placeholder="Paste /join token or full join link"
+                  />
+                  <Button onClick={handleManualJoin} className="bg-[#48A111] hover:bg-[#3d8f0e]">
+                    Continue
+                  </Button>
+                </div>
+              </div>
+            ) : loading ? (
               <p className="text-sm text-gray-600">Loading invite details...</p>
             ) : inviteError ? (
               <div className="space-y-4">

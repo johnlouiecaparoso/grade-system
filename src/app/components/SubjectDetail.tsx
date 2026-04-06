@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
@@ -60,9 +60,7 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
       const grade = gradeData as {
         id: string;
         total_grade: number;
-        subjects:
-          | { id: string; name: string; code: string; credits: number }[]
-          | { id: string; name: string; code: string; credits: number };
+        subjects: { id: string; name: string; code: string; credits: number }[] | { id: string; name: string; code: string; credits: number };
       };
 
       const subjectRecord = Array.isArray(grade.subjects) ? grade.subjects[0] : grade.subjects;
@@ -111,11 +109,15 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
   const assessmentRows = useMemo(() => {
     if (!subject) return [];
 
-    return CO_ASSESSMENT_TASKS.map((task) => ({
-      task,
-      score: Number(subject.assessmentScores[task.taskKey] ?? 0),
-      totalScore: Number(subject.assessmentTotalScores[task.taskKey] ?? 0),
-    }));
+    return CO_ASSESSMENT_TASKS.map((task) => {
+      const score = Number(subject.assessmentScores[task.taskKey] ?? 0);
+
+      return {
+        task,
+        score,
+        totalScore: Number(subject.assessmentTotalScores[task.taskKey] ?? 0),
+      };
+    });
   }, [subject]);
 
   if (!subject) {
@@ -187,27 +189,30 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Assessment Tasks</CardTitle>
+            <CardTitle>CO and Assessment Tasks</CardTitle>
+            <CardDescription>
+              Your assessment task scores for this subject
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <Table className="min-w-[520px]">
+              <Table className="min-w-[430px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[220px] sm:w-auto">Assessment Task</TableHead>
-                    <TableHead>Total Score</TableHead>
-                    <TableHead>Score</TableHead>
+                    <TableHead className="w-[132px]">Assessment Task</TableHead>
+                    <TableHead className="w-[80px] whitespace-nowrap">Total Score</TableHead>
+                    <TableHead className="w-[72px] whitespace-nowrap">Score</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {assessmentRows.map((row) => (
                     <TableRow key={row.task.taskKey}>
-                      <TableCell className="w-[220px] sm:w-auto">{row.task.assessmentTask}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{row.totalScore.toFixed(2)}</Badge>
+                      <TableCell className="w-[132px] leading-tight">{row.task.assessmentTask}</TableCell>
+                      <TableCell className="w-[80px]">
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0.5">{row.totalScore.toFixed(2)}</Badge>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{row.score.toFixed(2)}</Badge>
+                      <TableCell className="w-[72px]">
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0.5">{row.score.toFixed(2)}</Badge>
                       </TableCell>
                     </TableRow>
                   ))}
