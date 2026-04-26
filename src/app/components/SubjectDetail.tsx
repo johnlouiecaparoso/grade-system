@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { ArrowLeft, GraduationCap, User, LogOut } from 'lucide-react';
+import { ArrowLeft, User, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
@@ -135,9 +135,7 @@ export default function SubjectDetail({ onLogout }: SubjectDetailProps) {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex flex-wrap justify-between items-center gap-2">
             <div className="flex items-center space-x-3">
-              <div className="bg-[#48A111] p-2 rounded-lg">
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
+              <img src="/logo.png" alt="Logo" className="h-10 w-10 rounded-lg" />
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Grade Portal</h1>
                 <p className="text-sm text-gray-500">Academic Year 2025-2026</p>

@@ -4,8 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { GraduationCap, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,7 +14,6 @@ export default function Register() {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'student' as 'student' | 'instructor',
     studentId: ''
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -33,7 +31,6 @@ export default function Register() {
 
     const { error } = await signUp(formData.email, formData.password, {
       full_name: formData.name,
-      role: formData.role,
       student_number: formData.studentId || undefined,
     });
 
@@ -49,13 +46,11 @@ export default function Register() {
 
   if (registrationSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-[#e8f5e0] p-4">
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundImage: 'url(/bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1 text-center">
             <div className="flex justify-center mb-4">
-              <div className="bg-[#48A111] p-3 rounded-full">
-                <GraduationCap className="w-8 h-8 text-white" />
-              </div>
+              <img src="/logo.png" alt="Logo" className="h-12 w-12" />
             </div>
             <CardTitle className="text-2xl">Account created successfully</CardTitle>
             <CardDescription>
@@ -69,13 +64,16 @@ export default function Register() {
               </Button>
             </Link>
           </CardContent>
-          <CardFooter className="flex justify-center">
+          <CardFooter className="flex flex-col items-center space-y-2">
             <p className="text-sm text-gray-600">
               Already have an account?{' '}
               <Link to="/login" className="text-[#48A111] hover:underline">
                 Sign in here
               </Link>
             </p>
+            <div className="text-xs text-center text-gray-500 pt-2 border-t w-full">
+              © Caraga State University 2026
+            </div>
           </CardFooter>
         </Card>
       </div>
@@ -83,13 +81,11 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-[#e8f5e0] p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundImage: 'url(/bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <div className="bg-[#48A111] p-3 rounded-full">
-              <GraduationCap className="w-8 h-8 text-white" />
-            </div>
+            <img src="/logo.png" alt="Logo" className="h-12 w-12" />
           </div>
           <CardTitle className="text-2xl">Create Account</CardTitle>
           <CardDescription>
@@ -129,29 +125,15 @@ export default function Register() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select value={formData.role} onValueChange={(value: 'student' | 'instructor') => setFormData({ ...formData, role: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="instructor">Instructor</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="studentId">Student ID (Optional)</Label>
+              <Input
+                id="studentId"
+                type="text"
+                placeholder="Auto-generated if left empty"
+                value={formData.studentId}
+                onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+              />
             </div>
-            {formData.role === 'student' && (
-              <div className="space-y-2">
-                <Label htmlFor="studentId">Student ID (Optional)</Label>
-                <Input
-                  id="studentId"
-                  type="text"
-                  placeholder="Auto-generated if left empty"
-                  value={formData.studentId}
-                  onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                />
-              </div>
-            )}
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
@@ -208,6 +190,9 @@ export default function Register() {
               <Link to="/login" className="text-[#48A111] hover:underline">
                 Sign in here
               </Link>
+            </div>
+            <div className="text-xs text-center text-gray-500 pt-2 border-t">
+              © Caraga State University 2026
             </div>
           </CardFooter>
         </form>

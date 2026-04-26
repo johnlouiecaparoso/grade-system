@@ -12,7 +12,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['apple-touch-icon.png'],
+      includeAssets: ['mobile-logo.png', 'logo.png', 'bg.jpg'],
       manifest: {
         name: 'College Grade System App',
         short_name: 'Grade System',
@@ -24,20 +24,10 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
+            src: 'mobile-logo.png',
+            sizes: '192x192 512x512',
             type: 'image/png',
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-          },
-          {
-            src: 'pwa-maskable-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
+            purpose: 'any',
           },
         ],
       },
@@ -80,7 +70,7 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: true,
+        enabled: false,
       },
     }),
   ],

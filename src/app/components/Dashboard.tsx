@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
-import { GraduationCap, BookOpen, TrendingUp, User, LogOut, ScanLine } from 'lucide-react';
+import { BookOpen, TrendingUp, User, LogOut, ScanLine } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { formatGradePoint5 } from '../../lib/grades';
@@ -111,12 +111,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex flex-wrap justify-between items-center gap-2">
             <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-              <div className="bg-[#48A111] p-2 rounded-lg">
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">Grade Portal</h1>
-                <p className="text-sm text-gray-500">Academic Year 2025-2026</p>
+              <img src="/logo.png" alt="Logo" className="h-10 w-10 rounded-lg" />
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-xl font-semibold text-gray-900 truncate">Grade Portal</h1>
+                <p className="text-xs sm:text-sm text-gray-500">Academic Year 2025-2026</p>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
@@ -136,8 +134,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-semibold text-gray-900 mb-2">Welcome back, {user?.name}!</h2>
-          <p className="text-gray-600">Here&apos;s your academic progress overview</p>
+          <h2 className="text-xl sm:text-3xl font-semibold text-gray-900 mb-2 break-words">Welcome back, {user?.name}!</h2>
+          <p className="text-sm sm:text-base text-gray-600">Here&apos;s your academic progress overview</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -164,7 +162,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Credits</CardTitle>
-              <GraduationCap className="h-4 w-4 text-[#48A111]" />
+              <BookOpen className="h-4 w-4 text-[#48A111]" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">{subjects.reduce((sum, subject) => sum + subject.credits, 0)}</div>
@@ -173,9 +171,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           </Card>
         </div>
 
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-6">
           <h3 className="text-xl font-semibold text-gray-900">Your Subjects</h3>
-          <Button variant="outline" size="sm" onClick={() => navigate('/join')}>
+          <Button variant="outline" size="sm" onClick={() => navigate('/join')} className="w-full sm:w-auto">
             <ScanLine className="w-4 h-4 mr-2" />
             Scan Subject QR
           </Button>

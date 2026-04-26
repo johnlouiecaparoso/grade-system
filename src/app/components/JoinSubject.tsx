@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { GraduationCap, LogOut, ScanLine, User } from 'lucide-react';
+import { LogOut, ScanLine, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { UserAvatar } from './UserAvatar';
@@ -233,13 +233,11 @@ export default function JoinSubject({ onLogout }: JoinSubjectProps) {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex flex-wrap justify-between items-center gap-2">
-            <div className="flex items-center space-x-3">
-              <div className="bg-[#48A111] p-2 rounded-lg">
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">Grade Portal</h1>
-                <p className="text-sm text-gray-500">Student Join Subject</p>
+            <div className="flex items-center space-x-3 min-w-0">
+              <img src="/logo.png" alt="Logo" className="h-10 w-10 rounded-lg" />
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-xl font-semibold text-gray-900 truncate">Grade Portal</h1>
+                <p className="text-xs sm:text-sm text-gray-500">Student Join Subject</p>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
@@ -278,7 +276,7 @@ export default function JoinSubject({ onLogout }: JoinSubjectProps) {
 
                   {scannerError ? <p className="text-xs text-red-600">{scannerError}</p> : null}
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     {scannerActive ? (
                       <Button variant="outline" onClick={stopScanner}>
                         Stop Scanner
@@ -328,7 +326,7 @@ export default function JoinSubject({ onLogout }: JoinSubjectProps) {
 
                 <Badge className="bg-[#e8f5e0] text-[#2d6b0a] hover:bg-[#e8f5e0]">Student enrollment via invite</Badge>
 
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Button onClick={handleJoinSubject} className="bg-[#48A111] hover:bg-[#3d8f0e]" disabled={joining}>
                     {joining ? 'Joining...' : 'Join Subject'}
                   </Button>

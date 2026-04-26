@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { UserAvatar } from './UserAvatar';
-import { GraduationCap, User, LogOut, Mail, Save, ArrowLeft, BookOpen, TrendingUp, Camera } from 'lucide-react';
+import { User, LogOut, Mail, Save, ArrowLeft, BookOpen, TrendingUp, Camera, Award } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, supabaseUrl } from '../../lib/supabase';
@@ -176,14 +176,12 @@ export default function Profile({ onLogout }: ProfileProps) {
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-3">
-              <div className="bg-[#48A111] p-2 rounded-lg">
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">Grade Portal</h1>
-                <p className="text-sm text-gray-500">Academic Year 2025-2026</p>
+          <div className="flex flex-wrap justify-between items-center gap-2">
+            <div className="flex items-center space-x-3 min-w-0">
+              <img src="/logo.png" alt="Logo" className="h-10 w-10 rounded-lg" />
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-xl font-semibold text-gray-900 truncate">Grade Portal</h1>
+                <p className="text-xs sm:text-sm text-gray-500">Academic Year 2025-2026</p>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
@@ -221,7 +219,7 @@ export default function Profile({ onLogout }: ProfileProps) {
               <CardDescription>Manage your account details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center space-x-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative">
                   <Avatar className="w-20 h-20">
                     {profile?.avatar_url && !profileImgError && (
@@ -354,7 +352,7 @@ export default function Profile({ onLogout }: ProfileProps) {
                 </div>
                 <div className="flex items-center space-x-3">
                   <div className="bg-orange-100 p-2 rounded-lg">
-                    <GraduationCap className="w-5 h-5 text-orange-600" />
+                    <Award className="w-5 h-5 text-orange-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Total Credits</p>

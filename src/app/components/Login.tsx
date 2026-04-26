@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
-import { GraduationCap, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -27,13 +27,11 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-[#e8f5e0] p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundImage: 'url(/bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <div className="bg-[#48A111] p-3 rounded-full">
-              <GraduationCap className="w-8 h-8 text-white" />
-            </div>
+            <img src="/logo.png" alt="Logo" className="h-12 w-12" />
           </div>
           <CardTitle className="text-2xl">Welcome Back</CardTitle>
           <CardDescription>
@@ -90,6 +88,9 @@ export default function Login() {
               <Link to="/register" className="text-[#48A111] hover:underline">
                 Register here
               </Link>
+            </div>
+            <div className="text-xs text-center text-gray-500 pt-2 border-t">
+              © Caraga State University 2026
             </div>
           </CardFooter>
         </form>

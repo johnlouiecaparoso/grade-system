@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
-import { GraduationCap, User, LogOut, ArrowLeft, BookOpen, Users, Plus, Pencil, Trash2 } from 'lucide-react';
+import { GraduationCapIcon, User, LogOut, ArrowLeft, BookOpen, Users, Plus, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -249,9 +249,7 @@ export default function SectionSubjects({ onLogout }: SectionSubjectsProps) {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex flex-wrap justify-between items-center gap-2">
             <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-              <div className="bg-[#48A111] p-2 rounded-lg">
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
+              <img src="/logo.png" alt="Logo" className="h-10 w-10 rounded-lg" />
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Grade Portal</h1>
                 <p className="text-sm text-gray-500">Instructor Dashboard</p>
